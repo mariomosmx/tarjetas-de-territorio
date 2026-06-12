@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tarjetas de Territorio</title>
+  <link rel="manifest" href="./manifest.json" />
+  <meta name="theme-color" content="#0f1117" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Territorio" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+
+  <style>
+    /* ── Tokens ───────────────────────────────────────────── */
+    :root {
+      --bg:        #0f1117;
+      --surface:   #181b24;
+      --border:    #262a36;
+      --accent:    #4f7cff;
+      --accent-dim:#1e2d5a;
+      --text:      #e8eaf0;
+      --muted:     #7b8198;
+      --radius:    12px;
+      --gap:       12px;
+    }
+
+    /* ── Reset ────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior: none;
+    }
+
+    /* ── Header ───────────────────────────────────────────── */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: rgba(15,17,23,0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 16px 10px;
+    }
+
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
+
+    h1 {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--text);
+    }
+
+    .badge-offline {
+      display: none;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      border-radius: 100px;
+      padding: 3px 9px;
+    }
+
+    body.offline .badge-offline { display: flex; align-items: center; gap: 4px; }
+
+    /* ── Search ───────────────────────────────────────────── */
+    .search-wrap {
+      margin-top: 10px;
+      position: relative;
+    }
+
+    .search-wrap svg {
+      position: absolute;
+      left: 11px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 15px;
+      height: 15px;
+      color: var(--muted);
+      pointer-events: none;
+    }
+
+    #search {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      padding: 9px 12px 9px 34px;
+      outline: none;
+      transition: border-color .15s;
+    }
+
+    #search::placeholder { color: var(--muted); }
+    #search:focus { border-color: var(--accent); }
+
+    /* ── Grid ─────────────────────────────────────────────── */
+    main {
+      padding: var(--gap);
+    }
+
+    #count {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 10px;
+      letter-spacing: 0.03em;
+    }
+
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: var(--gap);
+    }
+
+    @media (min-width: 480px) { #grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (min-width: 720px) { #grid { grid-template-columns: repeat(4, 1fr); } }
+
+    /* ── Card ─────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform .15s, border-color .15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .card:active { transform: scale(0.97); }
+
+    .card-thumb {
+      width: 100%;
+      aspect-ratio: 3/2;
+      object-fit: cover;
+      display: block;
+      background: var(--border);
+    }
+
+    .card-label {
+      padding: 8px 10px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      letter-spacing: 0.02em;
+    }
+
+    /* ── Empty state ──────────────────────────────────────── */
+    #empty {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 60px 20px;
+      color: var(--muted);
+      font-size: 14px;
+      text-align: center;
+    }
+
+    #empty svg { width: 36px; height: 36px; opacity: .4; }
+
+    /* ── Lightbox ─────────────────────────────────────────── */
+    #lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: rgba(0,0,0,0.92);
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      gap: 12px;
+    }
+
+    #lightbox.open { display: flex; }
+
+    #lightbox img {
+      max-width: 100%;
+      max-height: calc(100dvh - 100px);
+      border-radius: var(--radius);
+      object-fit: contain;
+      box-shadow: 0 8px 40px rgba(0,0,0,.8);
+    }
+
+    .lb-controls {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .lb-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .15s;
+      -webkit-tap-highlight-color: transparent;
+      flex-shrink: 0;
+    }
+
+    .lb-btn:active { background: var(--border); }
+    .lb-btn svg { width: 18px; height: 18px; }
+
+    .lb-name {
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+      text-align: center;
+      min-width: 100px;
+    }
+
+    /* ── Install banner ───────────────────────────────────── */
+    #install-bar {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 50;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 12px 16px;
+      gap: 12px;
+      align-items: center;
+    }
+
+    #install-bar.visible { display: flex; }
+
+    #install-bar p {
+      flex: 1;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    #install-bar strong { color: var(--text); }
+
+    .btn-install {
+      flex-shrink: 0;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 9px 16px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .btn-dismiss {
+      flex-shrink: 0;
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-size: 20px;
+      cursor: pointer;
+      line-height: 1;
+      padding: 4px;
+    }
+
+    /* ── Swipe hint ───────────────────────────────────────── */
+    .lb-hint {
+      font-size: 11px;
+      color: var(--muted);
+      opacity: 0.6;
+      letter-spacing: 0.04em;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-dot"></div>
+        <h1>Tarjetas de Territorio</h1>
+      </div>
+      <span class="badge-offline">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0 1 19 12.55M5 12.55a10.94 10.94 0 0 1 5.17-2.39M10.71 5.05A16 16 0 0 1 22.56 9M1.42 9a15.91 15.91 0 0 1 4.7-2.88M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg>
+        Sin conexión
+      </span>
+    </div>
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input id="search" type="search" placeholder="Buscar tarjeta..." autocomplete="off" />
+    </div>
+  </header>
+
+  <main>
+    <p id="count"></p>
+    <div id="grid"></div>
+    <div id="empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      Sin resultados
+    </div>
+  </main>
+
+  <!-- Lightbox -->
+  <div id="lightbox" role="dialog" aria-modal="true">
+    <img id="lb-img" src="" alt="" />
+    <div class="lb-controls">
+      <button class="lb-btn" id="lb-prev" aria-label="Anterior">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <span class="lb-name" id="lb-name"></span>
+      <button class="lb-btn" id="lb-next" aria-label="Siguiente">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+    </div>
+    <button class="lb-btn" id="lb-close" aria-label="Cerrar" style="position:absolute;top:16px;right:16px;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+    <p class="lb-hint">Desliza para navegar</p>
+  </div>
+
+  <!-- Install banner -->
+  <div id="install-bar">
+    <p><strong>Instalar app</strong><br>Guarda las tarjetas para verlas sin internet.</p>
+    <button class="btn-install" id="btn-install">Instalar</button>
+    <button class="btn-dismiss" id="btn-dismiss" aria-label="Cerrar">×</button>
+  </div>
+
+  <script>
+    // ── Configuración: lista de imágenes ──────────────────────────────
+    // Edita este arreglo con los nombres de tus imágenes en la carpeta /images/
+    // El "label" es el nombre que aparece en la tarjeta.
+    const IMAGES = [
+      { file: 'T-1.webp', label: 'Territorio 1' },
+      { file: 'T-2.webp', label: 'Territorio 2' },
+      { file: 'T-3.webp', label: 'Territorio 3' },
+      { file: 'T-4.webp', label: 'Territorio 4' },
+      { file: 'T-5.webp', label: 'Territorio 5' },
+      { file: 'T-6.webp', label: 'Territorio 6' },
+      { file: 'T-7.webp', label: 'Territorio 7' },
+      { file: 'T-8.webp', label: 'Territorio 8' },
+      { file: 'T-9.webp', label: 'Territorio 9' },
+      { file: 'T-10.webp', label: 'Territorio 10' },
+      { file: 'T-11.webp', label: 'Territorio 11' },
+      { file: 'T-12.webp', label: 'Territorio 12' },
+      { file: 'T-13.webp', label: 'Territorio 13' },
+      { file: 'T-14.webp', label: 'Territorio 14' },
+      { file: 'T-15.webp', label: 'Territorio 15' },
+      { file: 'T-16.webp', label: 'Territorio 16' },
+      { file: 'T-17.webp', label: 'Territorio 17' },
+      { file: 'T-18.webp', label: 'Territorio 18' },
+      { file: 'T-19.webp', label: 'Territorio 19' },
+      { file: 'T-20.webp', label: 'Territorio 20' },
+      { file: 'T-21.webp', label: 'Territorio 21' },
+      { file: 'T-22.webp', label: 'Territorio 22' },
+      { file: 'T-23.webp', label: 'Territorio 23' },
+      { file: 'T-24.webp', label: 'Territorio 24' },
+      { file: 'T-25.webp', label: 'Territorio 25' },
+      { file: 'T-26.webp', label: 'Territorio 26' },
+      { file: 'T-27.webp', label: 'Territorio 27' },
+      { file: 'T-28.webp', label: 'Territorio 28' },
+      { file: 'T-29.webp', label: 'Territorio 29' },
+      { file: 'T-30.webp', label: 'Territorio 30' },
+      { file: 'T-30-2.webp', label: 'Territorio 30-2' },
+      { file: 'T-31.webp', label: 'Territorio 31' },
+      { file: 'T-32.webp', label: 'Territorio 32' },
+      { file: 'T-33.webp', label: 'Territorio 33' },
+      { file: 'T-34.webp', label: 'Territorio 34' },
+      { file: 'T-35.webp', label: 'Territorio 35' },
+      { file: 'T-36.webp', label: 'Territorio 36' },
+      { file: 'T-37.webp', label: 'Territorio 37' },
+      { file: 'T-38.webp', label: 'Territorio 38' },
+      { file: 'T-39.webp', label: 'Territorio 39' },
+      { file: 'T-40.webp', label: 'Territorio 40' },
+      { file: 'T-41.webp', label: 'Territorio 41' },
+      { file: 'T-42.webp', label: 'Territorio 42' },
+      { file: 'T-43.webp', label: 'Territorio 43' },
+      { file: 'T-44.webp', label: 'Territorio 44' },
+      { file: 'T-45.webp', label: 'Territorio 45' },
+      { file: 'T-46.webp', label: 'Territorio 46' },
+      { file: 'T-47.webp', label: 'Territorio 47' },
+      { file: 'T-48.webp', label: 'Territorio 48' },
+      { file: 'T-49.webp', label: 'Territorio 49' },
+      { file: 'T-50.webp', label: 'Territorio 50' },
+      { file: 'T-51.webp', label: 'Territorio 51' },
+      { file: 'T-52.webp', label: 'Territorio 52' },
+      { file: 'T-53.webp', label: 'Territorio 53' },
+      { file: 'T-54.webp', label: 'Territorio 54' },
+      { file: 'T-55.webp', label: 'Territorio 55' },
+      { file: 'T-56.webp', label: 'Territorio 56' },
+      { file: 'T-57.webp', label: 'Territorio 57' },
+      { file: 'T-58.webp', label: 'Territorio 58' },
+      { file: 'T-59.webp', label: 'Territorio 59' },
+      { file: 'T-60.webp', label: 'Territorio 60' },
+      { file: 'T-61.webp', label: 'Territorio 61' },
+      { file: 'T-62.webp', label: 'Territorio 62' },
+      { file: 'T-63.webp', label: 'Territorio 63' },
+      { file: 'T-63-2.webp', label: 'Territorio 63-2' },
+      { file: 'T-64.webp', label: 'Territorio 64' },
+      { file: 'T-65.webp', label: 'Territorio 65' },
+      { file: 'T-66.webp', label: 'Territorio 66' },
+      { file: 'T-67.webp', label: 'Territorio 67' },
+      { file: 'T-68.webp', label: 'Territorio 68' },
+      { file: 'T-69.webp', label: 'Territorio 69' },
+      { file: 'T-70.webp', label: 'Territorio 70' },
+      { file: 'T-71.webp', label: 'Territorio 71' },
+      { file: 'T-72.webp', label: 'Territorio 72' },
+      { file: 'T-73.webp', label: 'Territorio 73' },
+      { file: 'T-74.webp', label: 'Territorio 74' },
+      { file: 'T-75.webp', label: 'Territorio 75' },
+      { file: 'T-76.webp', label: 'Territorio 76' },
+      { file: 'T-77.webp', label: 'Territorio 77' },
+      { file: 'T-78.webp', label: 'Territorio 78' },
+      { file: 'T-79.webp', label: 'Territorio 79' },
+      { file: 'T-80.webp', label: 'Territorio 80' },
+      { file: 'T-81.webp', label: 'Territorio 81' },
+      { file: 'T-82.webp', label: 'Territorio 82' },
+      { file: 'T-83.webp', label: 'Territorio 83' },
+      { file: 'T-84.webp', label: 'Territorio 84' },
+      { file: 'T-85.webp', label: 'Territorio 85' },
+      { file: 'T-86.webp', label: 'Territorio 86' },
+      { file: 'T-87.webp', label: 'Territorio 87' },
+      { file: 'T-88.webp', label: 'Territorio 88' },
+      { file: 'T-89.webp', label: 'Territorio 89' },
+      { file: 'T-90.webp', label: 'Territorio 90' },
+      { file: 'T-91.webp', label: 'Territorio 91' },
+      { file: 'T-92.webp', label: 'Territorio 92' },
+      { file: 'T-93.webp', label: 'Territorio 93' },
+      { file: 'T-94.webp', label: 'Territorio 94' },
+      { file: 'T-95.webp', label: 'Territorio 95' },
+      { file: 'T-96.webp', label: 'Territorio 96' },
+      { file: 'T-97.webp', label: 'Territorio 97' },
+      { file: 'T-98.webp', label: 'Territorio 98' },
+      { file: 'T-99.webp', label: 'Territorio 99' },
+      { file: 'T-100.webp', label: 'Territorio 100' },
+      { file: 'T-101.webp', label: 'Territorio 101' },
+      { file: 'T-102.webp', label: 'Territorio 102' },
+      { file: 'T-103.webp', label: 'Territorio 103' },
+      { file: 'T-104.webp', label: 'Territorio 104' },
+      { file: 'T-105.webp', label: 'Territorio 105' },
+      { file: 'T-106.webp', label: 'Territorio 106' },
+      { file: 'T-107.webp', label: 'Territorio 107' },
+      { file: 'T-108.webp', label: 'Territorio 108' },
+      { file: 'T-109.webp', label: 'Territorio 109' },
+      { file: 'T-110.webp', label: 'Territorio 110' },
+      { file: 'T-111.webp', label: 'Territorio 111' },
+      { file: 'T-112.webp', label: 'Territorio 112' },
+      { file: 'T-113.webp', label: 'Territorio 113' },
+      { file: 'T-114.webp', label: 'Territorio 114' },
+      { file: 'T-115.webp', label: 'Territorio 115' },
+      { file: 'T-116.webp', label: 'Territorio 116' },
+      { file: 'T-117.webp', label: 'Territorio 117' },
+      { file: 'T-118.webp', label: 'Territorio 118' },
+      { file: 'T-119.webp', label: 'Territorio 119' },
+      { file: 'T-120.webp', label: 'Territorio 120' },
+      { file: 'T-121.webp', label: 'Territorio 121' },
+      { file: 'T-122.webp', label: 'Territorio 122' },
+      { file: 'T-123.webp', label: 'Territorio 123' },
+      { file: 'T-124.webp', label: 'Territorio 124' },
+      { file: 'T-125.webp', label: 'Territorio 125' },
+      { file: 'T-126.webp', label: 'Territorio 126' },
+      { file: 'T-127.webp', label: 'Territorio 127' },
+      { file: 'T-128.webp', label: 'Territorio 128' },
+      { file: 'T-129.webp', label: 'Territorio 129' },
+      { file: 'T-130.webp', label: 'Territorio 130' },
+      { file: 'T-131.webp', label: 'Territorio 131' },
+      { file: 'T-132.webp', label: 'Territorio 132' },
+      { file: 'T-132-5.webp', label: 'Territorio 132-5' },
+      { file: 'T-133.webp', label: 'Territorio 133' },
+      { file: 'T-134.webp', label: 'Territorio 134' },
+      { file: 'T-135.webp', label: 'Territorio 135' },
+      { file: 'T-136.webp', label: 'Territorio 136' },
+      { file: 'T-137.webp', label: 'Territorio 137' },
+      { file: 'T-138.webp', label: 'Territorio 138' },
+      { file: 'T-139.webp', label: 'Territorio 139' },
+      { file: 'T-140.webp', label: 'Territorio 140' },
+      { file: 'T-141.webp', label: 'Territorio 141' },
+      { file: 'T-142.webp', label: 'Territorio 142' },
+      { file: 'T-143.webp', label: 'Territorio 143' },
+      { file: 'T-144.webp', label: 'Territorio 144' },
+      { file: 'T-145.webp', label: 'Territorio 145' },
+      { file: 'T-146.webp', label: 'Territorio 146' },
+      { file: 'T-147.webp', label: 'Territorio 147' },
+      { file: 'T-148.webp', label: 'Territorio 148' },
+      { file: 'T-149.webp', label: 'Territorio 149' },
+      { file: 'T-150.webp', label: 'Territorio 150' },
+      { file: 'T-151.webp', label: 'Territorio 151' },
+      { file: 'T-153.webp', label: 'Territorio 153' },
+      { file: 'T-154.webp', label: 'Territorio 154' },
+      { file: 'T-155.webp', label: 'Territorio 155' },
+      { file: 'T-156.webp', label: 'Territorio 156' },
+      { file: 'T-157.webp', label: 'Territorio 157' },
+      { file: 'T-158.webp', label: 'Territorio 158' },
+      { file: 'T-159.webp', label: 'Territorio 159' },
+      { file: 'T-160.webp', label: 'Territorio 160' },
+      { file: 'T-161.webp', label: 'Territorio 161' },
+      { file: 'T-162.webp', label: 'Territorio 162' },
+      { file: 'T-163.webp', label: 'Territorio 163' },
+      { file: 'T-164.webp', label: 'Territorio 164' },
+      { file: 'T-165.webp', label: 'Territorio 165' }
+    ];
+    // ─────────────────────────────────────────────────────────────────
+
+    // ── Service Worker ────────────────────────────────────────────────
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(console.warn);
+    }
+
+    // ── Offline badge ─────────────────────────────────────────────────
+    function updateOnlineStatus() {
+      document.body.classList.toggle('offline', !navigator.onLine);
+    }
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    updateOnlineStatus();
+
+    // ── Render grid ───────────────────────────────────────────────────
+    const grid    = document.getElementById('grid');
+    const empty   = document.getElementById('empty');
+    const counter = document.getElementById('count');
+    const search  = document.getElementById('search');
+
+    let filteredImages = [...IMAGES];
+    let lbIndex = 0;
+
+    function renderGrid(images) {
+      filteredImages = images;
+      grid.innerHTML = '';
+
+      if (images.length === 0) {
+        empty.style.display = 'flex';
+        counter.textContent = '';
+        return;
+      }
+
+      empty.style.display = 'none';
+      counter.textContent = `${images.length} tarjeta${images.length !== 1 ? 's' : ''}`;
+
+      images.forEach((img, i) => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <img class="card-thumb" src="images/${img.file}" alt="${img.label}" loading="lazy" />
+          <p class="card-label">${img.label}</p>
+        `;
+        card.addEventListener('click', () => openLightbox(i));
+        grid.appendChild(card);
+      });
+    }
+
+    search.addEventListener('input', () => {
+      const q = search.value.toLowerCase().trim();
+      const filtered = q
+        ? IMAGES.filter(img => img.label.toLowerCase().includes(q) || img.file.toLowerCase().includes(q))
+        : [...IMAGES];
+      renderGrid(filtered);
+    });
+
+    renderGrid(IMAGES);
+
+    // ── Lightbox ──────────────────────────────────────────────────────
+    const lb      = document.getElementById('lightbox');
+    const lbImg   = document.getElementById('lb-img');
+    const lbName  = document.getElementById('lb-name');
+    const lbClose = document.getElementById('lb-close');
+    const lbPrev  = document.getElementById('lb-prev');
+    const lbNext  = document.getElementById('lb-next');
+
+    function openLightbox(index) {
+      lbIndex = index;
+      updateLightbox();
+      lb.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeLightbox() {
+      lb.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    function updateLightbox() {
+      const img = filteredImages[lbIndex];
+      lbImg.src = `images/${img.file}`;
+      lbImg.alt = img.label;
+      lbName.textContent = img.label;
+    }
+
+    lbClose.addEventListener('click', closeLightbox);
+    lbPrev.addEventListener('click', () => {
+      lbIndex = (lbIndex - 1 + filteredImages.length) % filteredImages.length;
+      updateLightbox();
+    });
+    lbNext.addEventListener('click', () => {
+      lbIndex = (lbIndex + 1) % filteredImages.length;
+      updateLightbox();
+    });
+
+    lb.addEventListener('click', e => {
+      if (e.target === lb) closeLightbox();
+    });
+
+    document.addEventListener('keydown', e => {
+      if (!lb.classList.contains('open')) return;
+      if (e.key === 'Escape') closeLightbox();
+      if (e.key === 'ArrowLeft') lbPrev.click();
+      if (e.key === 'ArrowRight') lbNext.click();
+    });
+
+    // ── Swipe en lightbox ─────────────────────────────────────────────
+    let touchStartX = 0;
+    lb.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+    lb.addEventListener('touchend', e => {
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      if (Math.abs(dx) > 50) {
+        dx < 0 ? lbNext.click() : lbPrev.click();
+      }
+    });
+
+    // ── Install banner (Android/Chrome) ───────────────────────────────
+    let deferredPrompt = null;
+    const installBar  = document.getElementById('install-bar');
+    const btnInstall  = document.getElementById('btn-install');
+    const btnDismiss  = document.getElementById('btn-dismiss');
+
+    window.addEventListener('beforeinstallprompt', e => {
+      e.preventDefault();
+      deferredPrompt = e;
+      installBar.classList.add('visible');
+    });
+
+    btnInstall.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      installBar.classList.remove('visible');
+    });
+
+    btnDismiss.addEventListener('click', () => {
+      installBar.classList.remove('visible');
+    });
+
+    window.addEventListener('appinstalled', () => {
+      installBar.classList.remove('visible');
+    });
+  </script>
+</body>
+</html>
